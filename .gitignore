@@ -5,3 +5,11 @@ test-ledger/
 *.log
 .DS_Store
 node_modules/
+
+
+# Ignorer node_modules
+node_modules/
+
+# Ignorer les logs et fichiers RocksDB
+scripts/test-ledger/rocksdb/
+scripts/test-ledger/validator-*.log
