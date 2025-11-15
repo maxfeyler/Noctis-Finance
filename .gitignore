@@ -4,3 +4,4 @@ target/
 test-ledger/
 *.log
 .DS_Store
+node_modules/
