@@ -12,4 +12,6 @@ node_modules/
 
 # Ignorer les logs et fichiers RocksDB
 scripts/test-ledger/rocksdb/
+scripts/test-ledger/validator-*.lognode_modules/
+scripts/test-ledger/rocksdb/
 scripts/test-ledger/validator-*.log
