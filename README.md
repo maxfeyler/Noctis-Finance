@@ -87,7 +87,8 @@ anchor deploy
 ### Run Locally
 
 - Terminal 1: Local validator (optional, or use devnet)
-```bash solana-test-validator
+```bash 
+solana-test-validator
 ```
 
 - Terminal 2: Deploy
@@ -107,7 +108,8 @@ Access at: http://localhost:3000
 ### Testing
 
 #### Run all tests
-```bash anchor test
+```bash 
+anchor test
 ```
 
 #### Run specific test
@@ -123,11 +125,11 @@ npm test
 
 ### Test Coverage
 
-✅ Program initialization
-✅ Confidential transfer with encryption
-✅ Account validation
-✅ Error handling (invalid addresses, amounts)
-⚠️  ZK proof verification (planned)
+✅ Program initialization<br>
+✅ Confidential transfer with encryption<br>
+✅ Account validation<br>
+✅ Error handling (invalid addresses, amounts)<br>
+⚠️  ZK proof verification (planned)<br>
 
 ### Tech Stack
 #### Smart Contract
@@ -181,7 +183,7 @@ Contributions welcome! Please follow these steps:
 
 - Follow Rust best practices
 - Add tests for new features
-- - Update documentation
+- Update documentation
 Run anchor test before committing
 
 
