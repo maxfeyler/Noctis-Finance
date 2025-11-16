@@ -15,3 +15,15 @@ scripts/test-ledger/rocksdb/
 scripts/test-ledger/validator-*.lognode_modules/
 scripts/test-ledger/rocksdb/
 scripts/test-ledger/validator-*.log
+
+# Ignore Node modules
+node_modules/
+
+# Ignore test ledger databases
+scripts/test-ledger/rocksdb/
+
+# Ignore validator logs
+scripts/test-ledger/*.log
+
+# Ignore temporary files
+*.log
