@@ -172,10 +172,7 @@ describe("noctis-finance", () => {
       console.log("✅ Expected error caught:");
       console.log(`   ${error.message}`);
       
-      expect(
-        error.message.includes("InvalidEncryptedAmount") ||
-        error.message.includes("requires (length 8)")
-      ).to.be.true;
+      expect(error.message).to.include("InvalidEncryptedAmount");
     }
   });
 });

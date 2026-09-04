@@ -1,7 +1,12 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{Token, TokenAccount};
+use anchor_spl::token_interface::{TokenAccount, TokenInterface};
 
-declare_id!("81rFic2WZSGogUTC2Vewh7qCWJaaXeaoXNs1oJrGrYfC");
+declare_id!("FQpdDs7QNnedPeWejKihHn6ythcADf1XG1voELR9JY85");
+
+/// Size of a Token-2022 confidential-transfer ciphertext payload accepted by
+/// `confidential_transfer`. The PoC currently only validates the shape of the
+/// payload; no encryption or proof verification happens on-chain yet.
+pub const ENCRYPTED_AMOUNT_LEN: usize = 8;
 
 #[program]
 pub mod noctis_finance {
@@ -14,9 +19,7 @@ pub mod noctis_finance {
         account.authority = ctx.accounts.authority.key();
         account.bump = ctx.bumps.confidential_account;
 
-        msg!("Confidential account initialized");
-        msg!("Authority: {}", account.authority);
-
+        msg!("Confidential account initialized for {}", account.authority);
         Ok(())
     }
 
@@ -25,27 +28,32 @@ pub mod noctis_finance {
         encrypted_amount: Vec<u8>,
     ) -> Result<()> {
         require!(
-            encrypted_amount.len() == 8,
+            encrypted_amount.len() == ENCRYPTED_AMOUNT_LEN,
             ErrorCode::InvalidEncryptedAmount
+        );
+        require_keys_eq!(
+            ctx.accounts.from.mint,
+            ctx.accounts.to.mint,
+            ErrorCode::MintMismatch
+        );
+        require_keys_eq!(
+            ctx.accounts.from.owner,
+            ctx.accounts.authority.key(),
+            ErrorCode::Unauthorized
         );
 
         msg!("Confidential transfer simulated");
         msg!("From: {}", ctx.accounts.from.key());
         msg!("To: {}", ctx.accounts.to.key());
-        msg!("Encrypted amount (8 bytes): {:?}", encrypted_amount);
-
         Ok(())
     }
 }
 
 #[account]
+#[derive(InitSpace)]
 pub struct ConfidentialAccount {
     pub authority: Pubkey,
     pub bump: u8,
-}
-
-impl ConfidentialAccount {
-    pub const LEN: usize = 8 + 32 + 1;
 }
 
 #[derive(Accounts)]
@@ -53,7 +61,7 @@ pub struct InitializeConfidentialAccount<'info> {
     #[account(
         init,
         payer = authority,
-        space = ConfidentialAccount::LEN,
+        space = 8 + ConfidentialAccount::INIT_SPACE,
         seeds = [b"confidential", authority.key().as_ref()],
         bump
     )]
@@ -68,7 +76,6 @@ pub struct InitializeConfidentialAccount<'info> {
 #[derive(Accounts)]
 pub struct ConfidentialTransfer<'info> {
     #[account(
-        mut,
         seeds = [b"confidential", authority.key().as_ref()],
         bump = confidential_account.bump,
         has_one = authority
@@ -77,17 +84,22 @@ pub struct ConfidentialTransfer<'info> {
 
     pub authority: Signer<'info>,
 
-    #[account(mut)]
-    pub from: Account<'info, TokenAccount>,
+    /// Works with both the legacy SPL Token program and Token-2022.
+    #[account(mut, token::token_program = token_program)]
+    pub from: InterfaceAccount<'info, TokenAccount>,
 
-    #[account(mut)]
-    pub to: Account<'info, TokenAccount>,
+    #[account(mut, token::token_program = token_program)]
+    pub to: InterfaceAccount<'info, TokenAccount>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[error_code]
 pub enum ErrorCode {
     #[msg("Encrypted amount must be exactly 8 bytes")]
     InvalidEncryptedAmount,
+    #[msg("Source and destination accounts must share the same mint")]
+    MintMismatch,
+    #[msg("Authority does not own the source token account")]
+    Unauthorized,
 }

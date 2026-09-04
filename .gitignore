@@ -1,29 +1,19 @@
+# Dependencies
 node_modules/
+
+# Build artifacts
 target/
 .anchor/
 test-ledger/
-*.log
+frontend/.next/
+frontend/out/
+
+# Keypairs & secrets — never commit private keys
+*-keypair.json
+scripts/*.json
+.env
+.env.*
+
+# OS / editor
 .DS_Store
-node_modules/
-
-
-# Ignorer node_modules
-node_modules/
-
-# Ignorer les logs et fichiers RocksDB
-scripts/test-ledger/rocksdb/
-scripts/test-ledger/validator-*.lognode_modules/
-scripts/test-ledger/rocksdb/
-scripts/test-ledger/validator-*.log
-
-# Ignore Node modules
-node_modules/
-
-# Ignore test ledger databases
-scripts/test-ledger/rocksdb/
-
-# Ignore validator logs
-scripts/test-ledger/*.log
-
-# Ignore temporary files
 *.log
