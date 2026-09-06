@@ -1,41 +1,22 @@
-'use client';
+import type { Metadata } from "next";
+import { Fraunces, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import "./globals.css";
+import { Providers } from "./providers";
 
-import './globals.css';
-import '@solana/wallet-adapter-react-ui/styles.css';
-import { useMemo } from 'react';
-import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
-import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { clusterApiUrl } from '@solana/web3.js';
+const display = Fraunces({ subsets: ["latin"], variable: "--font-display", axes: ["opsz"] });
+const sans = IBM_Plex_Sans({ subsets: ["latin"], variable: "--font-sans", weight: ["400", "500", "600"] });
+const mono = IBM_Plex_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400", "500"] });
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const network = WalletAdapterNetwork.Devnet;
-  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
+export const metadata: Metadata = {
+  title: "Noctis",
+  description: "Confidential payments on Solana, built on Token-2022 confidential transfers.",
+};
 
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      // Seulement wallets Solana
-    ],
-    []
-  );
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body>
-        <ConnectionProvider endpoint={endpoint}>
-          <WalletProvider wallets={wallets} autoConnect>
-            <WalletModalProvider>
-              {children}
-            </WalletModalProvider>
-          </WalletProvider>
-        </ConnectionProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

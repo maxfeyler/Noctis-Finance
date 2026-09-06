@@ -9,7 +9,7 @@ It does not invent cryptography. Amounts are encrypted with twisted ElGamal,
 proofs are generated client-side with the official `@solana/zk-sdk` (WASM) and
 verified on-chain by the ZK ElGamal Proof program.
 
-> **Status: working end-to-end on a local validator, no frontend yet.**
+> **Status: working end-to-end on a local validator, CLI and web app.**
 > The previous iteration of this repo was a hackathon PoC whose README
 > overstated what the code did. This version starts from the truth.
 
@@ -24,7 +24,8 @@ verified on-chain by the ZK ElGamal Proof program.
 | **Confidential transfer** (equality + validity + range proofs) | ✅ | `scripts/ct.ts` |
 | Local decryption of pending / available balances | ✅ | `scripts/ct.ts` |
 | Withdraw available → public balance | ✅ | `scripts/ct.ts` |
-| Wallet-connected web app | 🔄 being rebuilt on `@solana/kit` | `frontend/` (legacy, do not use) |
+| Wallet-connected web app: activate, deposit, apply, send, receive (QR), withdraw, activity | ✅ | `frontend/` |
+| Built-in burner wallet for extension-free demos (`NEXT_PUBLIC_DEV_WALLET=1`) | ✅ | `frontend/src/lib/devWallet.ts` |
 | Payment requests (pay-by-link / QR with encrypted amount) | 📋 planned | — |
 | Per-mint auditor key and read-only compliance view | 📋 planned | — |
 
@@ -73,6 +74,30 @@ npm run ct
 Environment variables: `RPC_URL` (default `http://127.0.0.1:8899`), `KEYPAIR`
 (default `~/.config/solana/id.json`), `AMOUNT`, `SEND`, `DECIMALS`.
 On devnet or mainnet, transaction links are printed for the Solana Explorer.
+
+`npm run account -- setup|balance|apply <mint>` manages the CLI wallet's own
+confidential account on any mint, e.g. to act as the recipient of a transfer
+sent from the web app.
+
+### Web app
+
+```bash
+cd frontend && npm install
+cp .env.example .env.local      # set NEXT_PUBLIC_RPC_URL; NEXT_PUBLIC_DEV_WALLET=1 for a burner wallet
+npm run dev                     # http://localhost:3000
+```
+
+The app talks to the wallet through the Wallet Standard (`@wallet-standard/react`
++ `@solana/react`), so any wallet exposing `solana:signTransaction` and
+`solana:signMessage` on the configured chain works: Phantom, Solflare, Backpack…
+Screens: choose or create a token, activate the confidential balance (two
+message signatures derive the keys, one transaction registers them), deposit,
+apply, send to a wallet address, receive with a QR code, withdraw, activity.
+Balances are decrypted in the tab and the keys live in memory only.
+
+With `NEXT_PUBLIC_DEV_WALLET=1` a "Noctis Dev Wallet" appears in the connect
+menu: a burner key kept in `localStorage`, auto-funded on localnet, meant for
+demos and tests only.
 
 ### Sample run (Agave 4.2.2, local, Apple Silicon)
 
@@ -125,9 +150,9 @@ Stack: [`@solana/kit`](https://github.com/anza-xyz/kit) 8 ·
 
 1. ~~Reproducible build, remove leaked keys, honest README~~ ✅
 2. ~~Real confidential transfer lifecycle, scripted and timed~~ ✅
-3. **Web app** on `@solana/kit` + wallet-standard: activate (one signature),
-   balances (public / pending / available, decrypted locally), send, receive
-   with QR, activity from RPC. Proofs in a Web Worker with step-by-step progress.
+3. ~~Web app on `@solana/kit` + Wallet Standard~~ ✅ — next: proofs in a Web
+   Worker, fewer wallet prompts per transfer (session key for proof accounts),
+   payment-request links.
 4. **Differentiation**: payment requests (encrypted amount, memo, expiry) via a
    thin Anchor program; per-mint auditor key and compliance view. Then an SDK.
 

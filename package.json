@@ -9,7 +9,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "ct": "tsx scripts/ct.ts"
+    "ct": "tsx scripts/ct.ts",
+    "account": "tsx scripts/account.ts"
   },
   "dependencies": {
     "@solana-program/system": "^0.14.1",

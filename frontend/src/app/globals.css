@@ -1,21 +1,123 @@
 @import "tailwindcss";
 
+:root {
+  --bg: #f3f2ee;
+  --surface: #ffffff;
+  --surface-2: #e9e8e2;
+  --line: #d6d4cc;
+  --ink: #15171d;
+  --ink-2: #4b4f5a;
+  --muted: #7a7e8a;
+  --accent: #8a6a1c;
+  --accent-ink: #ffffff;
+  --accent-soft: #f1e7cc;
+  --ok: #2e7d4f;
+  --ok-soft: #dcefe3;
+  --crit: #b3323a;
+  --crit-soft: #f6e1e2;
+  --info: #2f5fa8;
+  --info-soft: #dee7f5;
+  --shadow: 0 1px 2px rgba(20, 22, 30, 0.06), 0 8px 24px -12px rgba(20, 22, 30, 0.18);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0d14;
+    --surface: #131725;
+    --surface-2: #1b2031;
+    --line: #262d3f;
+    --ink: #ece9e0;
+    --ink-2: #b6b9c3;
+    --muted: #7f8494;
+    --accent: #d9b96a;
+    --accent-ink: #1a1508;
+    --accent-soft: #2a2518;
+    --ok: #7fc58f;
+    --ok-soft: #1a3325;
+    --crit: #e8737a;
+    --crit-soft: #3a1f22;
+    --info: #7fa6e8;
+    --info-soft: #1b2740;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -14px rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0d14; --surface: #131725; --surface-2: #1b2031; --line: #262d3f;
+  --ink: #ece9e0; --ink-2: #b6b9c3; --muted: #7f8494;
+  --accent: #d9b96a; --accent-ink: #1a1508; --accent-soft: #2a2518;
+  --ok: #7fc58f; --ok-soft: #1a3325; --crit: #e8737a; --crit-soft: #3a1f22; --info: #7fa6e8; --info-soft: #1b2740;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -14px rgba(0, 0, 0, 0.7);
+  color-scheme: dark;
+}
+
+html { background: var(--bg); }
 body {
   margin: 0;
-  padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
+.display { font-family: var(--font-display), "Iowan Old Style", Georgia, serif; font-weight: 500; letter-spacing: -0.01em; text-wrap: balance; }
+.mono { font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.eyebrow { font-family: var(--font-mono), monospace; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 
-/* Override wallet adapter button styles */
-.wallet-adapter-button {
-  background-color: #7c3aed !important;
-  transition: all 0.2s !important;
-}
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.card-lift { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 
-.wallet-adapter-button:hover {
-  background-color: #6d28d9 !important;
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 16px; border-radius: 8px; font-weight: 500; font-size: 0.92rem;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+  cursor: pointer; transition: background 0.15s, border-color 0.15s, opacity 0.15s;
 }
+.btn:hover { border-color: var(--muted); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:focus-visible, .field:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.btn-primary:hover { filter: brightness(1.06); border-color: transparent; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+.btn-ghost:hover { background: var(--surface-2); border-color: transparent; }
+.btn-sm { height: 32px; padding: 0 12px; font-size: 0.85rem; }
+
+.field {
+  width: 100%; height: 42px; padding: 0 12px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  font-family: var(--font-mono), monospace; font-size: 0.9rem;
+}
+.field::placeholder { color: var(--muted); font-family: var(--font-sans), sans-serif; }
+.field:focus { border-color: var(--accent); outline: none; }
+label.lbl { display: block; font-size: 0.8rem; color: var(--ink-2); margin-bottom: 6px; font-weight: 500; }
+
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font-family: var(--font-mono), monospace; font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; }
+.chip-ok { background: var(--ok-soft); color: var(--ok); }
+.chip-info { background: var(--info-soft); color: var(--info); }
+.chip-crit { background: var(--crit-soft); color: var(--crit); }
+.chip-muted { background: var(--surface-2); color: var(--ink-2); }
+.chip-accent { background: var(--accent-soft); color: var(--accent); }
+
+.tabs { display: flex; gap: 2px; padding: 3px; background: var(--surface-2); border-radius: 9px; }
+.tab { flex: 1; height: 34px; border-radius: 7px; border: none; background: transparent; color: var(--ink-2); font-weight: 500; font-size: 0.88rem; cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+
+.balance-row { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.balance-row:first-of-type { border-top: none; }
+.amount { font-family: var(--font-display), Georgia, serif; font-size: 1.6rem; font-variant-numeric: tabular-nums; line-height: 1; }
+.amount.hero { font-size: 2.6rem; }
+.amount .unit { font-family: var(--font-mono), monospace; font-size: 0.75rem; color: var(--muted); margin-left: 6px; letter-spacing: 0.05em; }
+
+.link { color: var(--accent); text-decoration: none; }
+.link:hover { text-decoration: underline; }
+
+.toast { font-family: var(--font-sans), sans-serif !important; }
+
+@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+.pulse { animation: pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } * { transition: none !important; } }
+
+/* Moon mark */
+.mark { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); position: relative; overflow: hidden; }
+.mark::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--surface); transform: translate(38%, -18%); }
