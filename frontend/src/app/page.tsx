@@ -1,17 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSelectedWalletAccount, useSignMessage, useWalletAccountTransactionSigner } from "@solana/react";
+import { useSelectedWalletAccount, useSignMessage, useSignTransactions, useWalletAccountTransactionSigner } from "@solana/react";
 import type { UiWalletAccount } from "@wallet-standard/react";
-import { address, type Address } from "@solana/kit";
-import { toast } from "sonner";
+import { address } from "@solana/kit";
 import { ExternalLink } from "lucide-react";
 import { WalletMenu } from "@/components/WalletMenu";
 import { BalanceCard } from "@/components/BalanceCard";
 import { Actions } from "@/components/Actions";
 import { Activity } from "@/components/Activity";
 import { MintPanel } from "@/components/MintPanel";
-import { CHAIN, CLUSTER, DEFAULT_MINT, explorerAddress, explorerTx } from "@/lib/config";
+import { OperationPanel } from "@/components/OperationPanel";
+import { batchSignerFromWallet } from "@/lib/batch";
+import { STEP_LABELS, type OpContext, type Operation, type StepId } from "@/lib/operation";
+import { CHAIN, CLUSTER, DEFAULT_MINT, explorerAddress } from "@/lib/config";
 import { createNoctisClient } from "@/lib/client";
 import { deriveConfidentialKeys, messageSignerFromWallet, type ConfidentialKeys } from "@/lib/keys";
 import * as ct from "@/lib/ct";
@@ -57,8 +59,8 @@ function Hero() {
       </div>
       <ol className="card p-6 m-0 list-none grid gap-4 text-sm">
         {[
-          ["Activate", "Two signatures derive your encryption keys. One transaction registers the public key."],
-          ["Deposit", "Public tokens move into an encrypted pending balance, then you apply them."],
+          ["Activate", "One signed message derives your encryption keys. One approval registers the public key."],
+          ["Deposit", "Public tokens move into your encrypted balance, spendable right away."],
           ["Send", "The amount is encrypted for the recipient with three zero-knowledge proofs."],
           ["Withdraw", "Bring tokens back to a public balance whenever you need to."],
         ].map(([t, d], i) => (
@@ -75,8 +77,11 @@ function Hero() {
 function Session({ account }: { account: UiWalletAccount }) {
   const owner = address(account.address);
   const txSigner = useWalletAccountTransactionSigner(account, CHAIN);
+  const signTransactions = useSignTransactions(account, CHAIN);
   const signMessage = useSignMessage(account);
   const client = useMemo(() => createNoctisClient(txSigner), [txSigner]);
+  const wallet = useMemo(() => batchSignerFromWallet(owner, signTransactions), [owner, signTransactions]);
+  const messageSigner = useMemo(() => messageSignerFromWallet(owner, signMessage), [owner, signMessage]);
 
   const [mint, setMint] = useState<string>(() => {
     try { return localStorage.getItem(MINT_KEY) ?? DEFAULT_MINT; } catch { return DEFAULT_MINT; }
@@ -85,14 +90,21 @@ function Session({ account }: { account: UiWalletAccount }) {
   const [keys, setKeys] = useState<ConfidentialKeys | null>(null);
   const [state, setState] = useState<ct.AccountState | null>(null);
   const [activity, setActivity] = useState<ct.ActivityItem[] | null>(null);
-  const [busy, setBusy] = useState(false);
   const [loadingActivity, setLoadingActivity] = useState(false);
+  const [op, setOp] = useState<Operation | null>(null);
+  const busy = op?.status === "running";
   const mintAddr = useMemo(() => { try { return mint ? address(mint) : null; } catch { return null; } }, [mint]);
   const keysRef = useRef(keys);
-  keysRef.current = keys;
+  useEffect(() => { keysRef.current = keys; }, [keys]);
 
   // Keys are bound to (owner, mint): drop them when either changes.
-  useEffect(() => { setKeys(null); setState(null); setActivity(null); }, [owner, mintAddr]);
+  const scope = `${owner}:${mintAddr}`;
+  const [lastScope, setLastScope] = useState(scope);
+  if (scope !== lastScope) {
+    setLastScope(scope);
+    setKeys(null); setState(null); setActivity(null);
+    keysRef.current = null;
+  }
 
   const refresh = useCallback(async (k: ConfidentialKeys | null = keysRef.current) => {
     if (!mintAddr) return;
@@ -107,8 +119,8 @@ function Session({ account }: { account: UiWalletAccount }) {
       setLoadingActivity(true);
       ct.loadActivity(client, s.token).then(setActivity).catch(() => setActivity([])).finally(() => setLoadingActivity(false));
     } catch (e) {
-      toast.error("Could not load this token", { description: errorMessage(e) });
       setMintInfo(null);
+      setOp({ title: "Load token", steps: [], signatures: [], status: "error", error: errorMessage(e) });
     }
   }, [client, owner, mintAddr]);
 
@@ -117,69 +129,101 @@ function Session({ account }: { account: UiWalletAccount }) {
   const decimals = mintInfo?.decimals ?? 0;
   const symbol = "tokens";
 
-  /** Wraps an action with busy state, progress toasts and a refresh. */
-  const act = useCallback(async (label: string, fn: (progress: ct.Progress) => Promise<readonly string[] | { signatures: readonly string[]; extra?: string }>) => {
+  /** Runs one operation with a live step list; the panel stays up until closed. */
+  const run = useCallback(async (
+    title: string,
+    stepIds: StepId[],
+    fn: (ctx: { op: OpContext; client: typeof client; wallet: typeof wallet; owner: typeof txSigner }) => Promise<string | void>,
+  ) => {
     if (busy) return;
-    setBusy(true);
-    const id = toast.loading(label);
+    const steps = stepIds.map((id) => ({ id, label: STEP_LABELS[id], status: "todo" as const }));
+    setOp({ title, steps, signatures: [], status: "running" });
+    const patch = (f: (o: Operation) => Operation) => setOp((o) => (o ? f(o) : o));
+    const setStep = (id: StepId, change: Partial<Operation["steps"][number]>) =>
+      patch((o) => ({ ...o, steps: o.steps.map((s) => (s.id === id ? { ...s, ...change } : s)) }));
+    const ctx: OpContext = {
+      step: (id, detail) => patch((o) => ({
+        ...o,
+        steps: o.steps.map((s) => s.status === "active" ? { ...s, status: "done" } : s.id === id ? { ...s, status: "active", detail } : s),
+      })),
+      detail: (id, detail) => setStep(id, { detail }),
+      skip: (id, detail) => setStep(id, { status: "done", detail }),
+      signature: (sig) => patch((o) => ({ ...o, signatures: [...o.signatures, sig] })),
+    };
     try {
-      const out = await fn((msg) => toast.loading(msg, { id }));
-      const signatures = "signatures" in out ? out.signatures : out;
-      const extra = "signatures" in out ? out.extra : undefined;
-      const last = signatures[signatures.length - 1];
-      toast.success(`${label} · done`, {
-        id,
-        description: extra,
-        action: last ? { label: "Explorer", onClick: () => window.open(explorerTx(last), "_blank") } : undefined,
-      });
+      const summary = await fn({ op: ctx, client, wallet, owner: txSigner });
+      patch((o) => ({
+        ...o,
+        status: "done",
+        summary: summary || undefined,
+        steps: o.steps.map((s) => (s.status === "active" || s.status === "todo" ? { ...s, status: "done" } : s)),
+      }));
       await refresh();
     } catch (e) {
       console.error(e);
-      toast.error(`${label} · failed`, { id, description: errorMessage(e) });
-    } finally {
-      setBusy(false);
+      patch((o) => ({
+        ...o,
+        status: "error",
+        error: errorMessage(e),
+        steps: o.steps.map((s) => (s.status === "active" ? { ...s, status: "error" } : s)),
+      }));
     }
-  }, [busy, refresh]);
+  }, [busy, client, wallet, txSigner, refresh]);
 
-  const unlock = useCallback(async (): Promise<ConfidentialKeys> => {
-    if (keysRef.current) return keysRef.current;
+  /** Derives the keys once per (owner, mint); later calls are instant. */
+  const unlock = useCallback(async (op: OpContext): Promise<ConfidentialKeys> => {
+    if (keysRef.current) { op.skip("keys", "Already unlocked"); return keysRef.current; }
     if (!mintAddr) throw new Error("Choose a token first");
-    const signer = messageSignerFromWallet(owner, signMessage);
-    const k = await deriveConfidentialKeys(signer, mintAddr);
-    setKeys(k);
+    op.step("keys", "Sign one message in your wallet");
+    const k = await deriveConfidentialKeys(messageSigner, mintAddr);
     keysRef.current = k;
+    setKeys(k);
     return k;
-  }, [owner, mintAddr, signMessage]);
+  }, [mintAddr, messageSigner]);
 
-  const onUnlock = () => act("Unlock balance", async (p) => { p("Sign two messages to derive your keys"); await unlock(); return []; });
-  const onActivate = () => act("Activate confidential balance", async (p) => {
-    p("Sign two messages to derive your keys");
-    const k = await unlock();
-    return ct.activate(client, txSigner, k, p);
+  const token = state?.token;
+  const onUnlock = () => run("Unlock balance", ["keys"], async ({ op }) => { await unlock(op); });
+  const onActivate = () => run("Activate confidential balance", ["keys", "prepare", "sign", "confirm"], async (c) => {
+    await ct.activate(c, await unlock(c.op));
+    return "Your confidential balance is active. Deposit tokens or share your address to get paid.";
   });
-  const onApply = () => act("Apply pending balance", async (p) => ct.applyPending(client, txSigner, state!.token, await unlock(), p));
-  const onDeposit = (amount: bigint) => act("Deposit", (p) => ct.deposit(client, txSigner, state!.token, mintAddr!, amount, decimals, p));
-  const onWithdraw = (amount: bigint) => act("Withdraw", async (p) => ct.withdraw(client, txSigner, await unlock(), state!.token, amount, decimals, p));
-  const onSend = (to: string, amount: bigint) => act(`Send ${toUi(amount, decimals)} confidentially`, async (p) => {
-    let dest: Address;
-    try { dest = address(to); } catch { throw new Error("Invalid recipient address"); }
-    if (dest === owner) throw new Error("That is your own address");
-    const r = await ct.transfer(client, txSigner, await unlock(), state!.token, dest, amount, p);
-    return { signatures: r.signatures, extra: `Proofs generated in ${r.proofMs} ms · ${r.signatures.length} transactions` };
+  const onApply = () => run("Apply pending balance", ["keys", "prepare", "sign", "confirm"], async (c) => {
+    await ct.applyPending(c, await unlock(c.op), token!);
+    return "Received funds are now spendable.";
   });
-  const onCreateDemo = () => act("Create demo mint", async (p) => {
-    const r = await ct.createDemoMint(client, txSigner, 2, p);
-    changeMint(r.mint);
-    return { signatures: r.signatures, extra: `Mint ${r.mint}` };
+  const onDeposit = (amount: bigint) => run(`Deposit ${toUi(amount, decimals)} ${symbol}`, ["keys", "prepare", "sign", "confirm"], async (c) => {
+    await ct.depositAndApply(c, await unlock(c.op), token!, amount, decimals);
+    return "Deposited and spendable, in one transaction.";
   });
-  const onMintDemo = () => act("Mint 1 000 demo tokens", (p) => ct.mintDemoTokens(client, txSigner, mintAddr!, state!.token, 1000n * 10n ** BigInt(decimals), p));
+  const onWithdraw = (amount: bigint) => run(`Withdraw ${toUi(amount, decimals)} ${symbol}`, ["keys", "prepare", "sign", "confirm"], async (c) => {
+    await ct.withdraw(c, await unlock(c.op), token!, amount, decimals);
+    return "Back in your public balance.";
+  });
+  const onSend = (to: string, amount: bigint) => run(`Send ${toUi(amount, decimals)} ${symbol}`, ["keys", "prepare", "sign", "confirm"], async (c) => {
+    const r = await ct.transfer(c, await unlock(c.op), token!, address(to), amount);
+    return `Sent. Only ciphertexts and proofs went on-chain. Proofs took ${r.proofMs} ms.`;
+  });
+  const onCreateDemo = () => run("Create demo mint", ["sign", "confirm"], async (c) => {
+    const m = await ct.createDemoMint(c, 2);
+    changeMint(m);
+    return `New confidential mint ${m.slice(0, 8)}… with you as mint authority.`;
+  });
+  const onMintDemo = () => run("Mint 1 000 demo tokens", ["sign", "confirm"], async (c) => {
+    await ct.mintDemoTokens(c, mintAddr!, token!, 1000n * 10n ** BigInt(decimals));
+    return "1 000 tokens in your public balance. Deposit them to make them confidential.";
+  });
+
+  const checkRecipient = useCallback(
+    (to: string) => (mintAddr ? ct.recipientStatus(client, address(to), mintAddr) : Promise.resolve("no-account" as const)),
+    [client, mintAddr],
+  );
 
   const changeMint = (m: string) => {
     setMint(m);
     try { localStorage.setItem(MINT_KEY, m); } catch {}
   };
 
-  const ready = !!(state?.configured && keys);
+  const closeOp = useCallback(() => setOp(null), []);
   const canMintDemo = !!(mintInfo?.authority === owner && state?.exists);
 
   return (
@@ -221,8 +265,9 @@ function Session({ account }: { account: UiWalletAccount }) {
               state={state}
               decimals={decimals}
               symbol={symbol}
-              ready={ready}
+              unlocked={!!keys}
               busy={busy}
+              checkRecipient={checkRecipient}
               onSend={onSend}
               onDeposit={onDeposit}
               onWithdraw={onWithdraw}
@@ -234,6 +279,7 @@ function Session({ account }: { account: UiWalletAccount }) {
           </p>
         </>
       )}
+      {op && <OperationPanel op={op} onClose={closeOp} />}
     </div>
   );
 }

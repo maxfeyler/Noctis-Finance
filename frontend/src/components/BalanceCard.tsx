@@ -36,8 +36,8 @@ export function BalanceCard({ state, decimals, symbol, hasKeys, busy, onUnlock, 
       ) : !state.configured ? (
         <div>
           <p className="text-sm mb-4" style={{ color: "var(--ink-2)", maxWidth: "46ch" }}>
-            Activate a confidential balance for this token. Your wallet signs two messages to derive your encryption keys
-            (deterministic, recoverable, never stored), then one transaction registers the public key on your account.
+            Activate a confidential balance for this token. Your wallet signs one message to derive your encryption keys
+            (deterministic, recoverable, never stored), then one approval registers the public key on your account.
           </p>
           <button className="btn btn-primary" onClick={onActivate} disabled={busy}>Activate confidential balance</button>
         </div>
@@ -49,7 +49,7 @@ export function BalanceCard({ state, decimals, symbol, hasKeys, busy, onUnlock, 
           ) : (
             <>
               <p className="text-sm mt-3 mb-4" style={{ color: "var(--ink-2)", maxWidth: "46ch" }}>
-                Sign two messages with your wallet to derive the decryption keys for this token.
+                Sign one message with your wallet to derive the decryption keys for this token.
               </p>
               <button className="btn" onClick={onUnlock} disabled={busy}><Eye size={16} /> Unlock balance</button>
             </>

@@ -121,3 +121,11 @@ label.lbl { display: block; font-size: 0.8rem; color: var(--ink-2); margin-botto
 /* Moon mark */
 .mark { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); position: relative; overflow: hidden; }
 .mark::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--surface); transform: translate(38%, -18%); }
+
+/* Operation progress panel */
+.op-panel { position: fixed; right: 20px; bottom: 20px; width: min(360px, calc(100vw - 40px)); padding: 18px 20px; z-index: 40; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.hint { font-size: 0.75rem; margin-top: 6px; display: flex; align-items: center; gap: 6px; }
+.hint-ok { color: var(--ok); } .hint-warn { color: var(--crit); } .hint-muted { color: var(--muted); }

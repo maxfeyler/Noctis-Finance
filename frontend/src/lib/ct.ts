@@ -1,4 +1,4 @@
-import { generateKeyPairSigner, type Address, type InstructionPlanInput, type Signature, type TransactionSigner } from "@solana/kit";
+import { generateKeyPairSigner, type Address, type TransactionSigner } from "@solana/kit";
 import {
   TOKEN_2022_PROGRAM_ADDRESS,
   extension,
@@ -6,6 +6,7 @@ import {
   fetchMint,
   fetchToken,
   findAssociatedTokenPda,
+  getApplyConfidentialPendingBalanceInstruction,
   getConfidentialDepositInstruction,
   getCreateMintInstructionPlan,
   getMintToInstruction,
@@ -21,6 +22,8 @@ import {
 } from "@solana-program/token-2022/confidential";
 import type { NoctisClient } from "./client";
 import type { ConfidentialKeys } from "./keys";
+import { executeBatched, type BatchSigner } from "./batch";
+import type { OpContext } from "./operation";
 
 export type AccountState = Readonly<{
   token: Address;
@@ -56,9 +59,7 @@ export async function loadAccountState(
   const acct = await fetchMaybeToken(client.rpc, token);
   if (!acct.exists) return { token, exists: false, configured: false, publicAmount: 0n };
   const data = acct.data;
-  const configured =
-    data.extensions.__option === "Some" &&
-    data.extensions.value.some((e) => e.__kind === "ConfidentialTransferAccount");
+  const configured = isConfigured(data);
   const state: AccountState = { token, exists: true, configured, publicAmount: data.amount, raw: data };
   if (configured && keys) {
     const b = decryptConfidentialTransferBalance({
@@ -74,62 +75,49 @@ export async function loadAccountState(
   return state;
 }
 
-export type Progress = (msg: string) => void;
-
-function sigs(result: unknown, out: Signature[] = []): Signature[] {
-  if (Array.isArray(result)) result.forEach((r) => sigs(r, out));
-  else if (result && typeof result === "object") {
-    for (const [k, v] of Object.entries(result as Record<string, unknown>)) {
-      if (k === "signature" && typeof v === "string") out.push(v as Signature);
-      else if (v && typeof v === "object") sigs(v, out);
-    }
-  }
-  return out;
+/** True when a decoded token account carries the ConfidentialTransferAccount extension. */
+export function isConfigured(t: Token) {
+  return t.extensions.__option === "Some" && t.extensions.value.some((e) => e.__kind === "ConfidentialTransferAccount");
 }
 
-/** Plans, reports the number of transactions to sign, executes, returns signatures. */
-async function run(client: NoctisClient, plan: InstructionPlanInput, progress?: Progress) {
-  const txPlan = await client.planTransactions(plan);
-  const count = countSingles(txPlan);
-  progress?.(count > 1 ? `Sign ${count} transactions in your wallet` : "Sign the transaction in your wallet");
-  const result = await client.sendTransactions(plan);
-  return sigs(result);
+export type RecipientStatus = "ready" | "not-activated" | "no-account";
+
+/** Whether `owner` can receive confidential transfers of `mint`. */
+export async function recipientStatus(client: NoctisClient, owner: Address, mint: Address): Promise<RecipientStatus> {
+  const acct = await fetchMaybeToken(client.rpc, await tokenAddress(owner, mint));
+  if (!acct.exists) return "no-account";
+  return isConfigured(acct.data) ? "ready" : "not-activated";
 }
-function countSingles(plan: unknown): number {
-  if (!plan || typeof plan !== "object") return 0;
-  const p = plan as { kind?: string; plans?: unknown[] };
-  if (p.kind === "single") return 1;
-  return (p.plans ?? []).reduce<number>((n, x) => n + countSingles(x), 0);
-}
+
+type Ctx = { client: NoctisClient; wallet: BatchSigner; owner: TransactionSigner; op: OpContext };
 
 /** Dev helper: a fresh Token-2022 mint with the confidential extension, authority = wallet. */
-export async function createDemoMint(client: NoctisClient, authority: TransactionSigner, decimals = 2, progress?: Progress) {
+export async function createDemoMint({ client, wallet, owner, op }: Ctx, decimals = 2) {
   const newMint = await generateKeyPairSigner();
   const plan = await getCreateMintInstructionPlan(client, {
     payer: client.payer,
     newMint,
     decimals,
-    mintAuthority: authority,
+    mintAuthority: owner,
     extensions: [
       extension("ConfidentialTransferMint", {
-        authority: authority.address,
+        authority: owner.address,
         autoApproveNewAccounts: true,
         auditorElgamalPubkey: null,
       }),
     ],
   });
-  const s = await run(client, plan, progress);
-  return { mint: newMint.address, signatures: s };
+  await executeBatched(client, wallet, plan, op);
+  return newMint.address;
 }
 
 /** Dev helper: mint public tokens to the wallet's own token account (wallet must be mint authority). */
-export async function mintDemoTokens(client: NoctisClient, authority: TransactionSigner, mint: Address, token: Address, amount: bigint, progress?: Progress) {
-  progress?.("Sign the transaction in your wallet");
-  const r = await client.sendTransaction([getMintToInstruction({ mint, token, mintAuthority: authority, amount })]);
-  return sigs(r);
+export async function mintDemoTokens({ client, wallet, owner, op }: Ctx, mint: Address, token: Address, amount: bigint) {
+  await executeBatched(client, wallet, [getMintToInstruction({ mint, token, mintAuthority: owner, amount })], op);
 }
 
-export async function activate(client: NoctisClient, owner: TransactionSigner, keys: ConfidentialKeys, progress?: Progress) {
+export async function activate({ client, wallet, owner, op }: Ctx, keys: ConfidentialKeys) {
+  op.step("prepare", "Public-key validity proof");
   const plan = await getCreateConfidentialTransferAccountInstructionPlan({
     payer: client.payer,
     owner,
@@ -138,18 +126,39 @@ export async function activate(client: NoctisClient, owner: TransactionSigner, k
     elgamalKeypair: keys.elgamalKeypair,
     aesKey: keys.aesKey,
   });
-  return run(client, plan, progress);
+  await executeBatched(client, wallet, plan, op);
 }
 
-export async function deposit(client: NoctisClient, owner: TransactionSigner, token: Address, mint: Address, amount: bigint, decimals: number, progress?: Progress) {
-  progress?.("Sign the transaction in your wallet");
-  const r = await client.sendTransaction([
-    getConfidentialDepositInstruction({ token, mint, authority: owner, amount, decimals }),
-  ]);
-  return sigs(r);
+/**
+ * Deposit public tokens and make them spendable in a single transaction.
+ *
+ * `ApplyPendingBalance` normally needs the post-deposit account state, but its
+ * inputs are predictable: the credit counter goes up by exactly one and the
+ * new available balance is available + pending + amount, which we encrypt
+ * locally with the AES key.
+ */
+export async function depositAndApply({ client, wallet, owner, op }: Ctx, keys: ConfidentialKeys, token: Address, amount: bigint, decimals: number) {
+  op.step("prepare", "Computing the new encrypted balance");
+  const acct = await fetchToken(client.rpc, token);
+  const b = decryptConfidentialTransferBalance({
+    tokenAccount: acct.data,
+    elgamalSecretKey: keys.elgamalKeypair.secret(),
+    aesKey: keys.aesKey,
+  });
+  const newAvailable = b.availableBalance + b.pendingBalance + amount;
+  await executeBatched(client, wallet, [
+    getConfidentialDepositInstruction({ token, mint: keys.mint, authority: owner, amount, decimals }),
+    getApplyConfidentialPendingBalanceInstruction({
+      token,
+      authority: owner,
+      expectedPendingBalanceCreditCounter: b.pendingBalanceCreditCounter + 1n,
+      newDecryptableAvailableBalance: keys.aesKey.encrypt(newAvailable).toBytes(),
+    }),
+  ], op);
 }
 
-export async function applyPending(client: NoctisClient, owner: TransactionSigner, token: Address, keys: ConfidentialKeys, progress?: Progress) {
+export async function applyPending({ client, wallet, owner, op }: Ctx, keys: ConfidentialKeys, token: Address) {
+  op.step("prepare", "Re-encrypting the available balance");
   const acct = await fetchToken(client.rpc, token);
   const ix = getApplyConfidentialPendingBalanceInstructionFromToken({
     token,
@@ -158,32 +167,20 @@ export async function applyPending(client: NoctisClient, owner: TransactionSigne
     elgamalSecretKey: keys.elgamalKeypair.secret(),
     aesKey: keys.aesKey,
   });
-  progress?.("Sign the transaction in your wallet");
-  const r = await client.sendTransaction([ix]);
-  return sigs(r);
+  await executeBatched(client, wallet, [ix], op);
 }
 
-export async function transfer(
-  client: NoctisClient,
-  owner: TransactionSigner,
-  keys: ConfidentialKeys,
-  sourceToken: Address,
-  recipientOwner: Address,
-  amount: bigint,
-  progress?: Progress,
-) {
+export async function transfer({ client, wallet, owner, op }: Ctx, keys: ConfidentialKeys, sourceToken: Address, recipientOwner: Address, amount: bigint) {
+  op.step("prepare", "Checking the recipient");
   const destinationToken = await tokenAddress(recipientOwner, keys.mint);
   const [src, dst] = await Promise.all([
     fetchToken(client.rpc, sourceToken),
     fetchMaybeToken(client.rpc, destinationToken),
   ]);
-  if (!dst.exists) throw new Error("The recipient has not activated a confidential account for this token yet.");
-  const dstConfigured =
-    dst.data.extensions.__option === "Some" &&
-    dst.data.extensions.value.some((e) => e.__kind === "ConfidentialTransferAccount");
-  if (!dstConfigured) throw new Error("The recipient's token account is not configured for confidential transfers.");
-
-  progress?.("Encrypting amount and generating proofs…");
+  if (!dst.exists || !isConfigured(dst.data)) {
+    throw new Error("The recipient has not activated a confidential balance for this token yet.");
+  }
+  op.detail("prepare", "Equality, validity and range proofs");
   const t = performance.now();
   const plan = await getConfidentialTransferInstructionPlan({
     sourceToken,
@@ -199,13 +196,14 @@ export async function transfer(
     rpc: client.rpc,
   });
   const proofMs = Math.round(performance.now() - t);
-  const signatures = await run(client, plan, progress);
-  return { signatures, proofMs, destinationToken };
+  op.detail("prepare", `Proofs ready in ${proofMs} ms`);
+  await executeBatched(client, wallet, plan, op);
+  return { proofMs };
 }
 
-export async function withdraw(client: NoctisClient, owner: TransactionSigner, keys: ConfidentialKeys, token: Address, amount: bigint, decimals: number, progress?: Progress) {
+export async function withdraw({ client, wallet, owner, op }: Ctx, keys: ConfidentialKeys, token: Address, amount: bigint, decimals: number) {
+  op.step("prepare", "Equality and range proofs");
   const acct = await fetchToken(client.rpc, token);
-  progress?.("Generating range proof…");
   const plan = await getConfidentialWithdrawInstructionPlan({
     token,
     mint: keys.mint,
@@ -218,7 +216,7 @@ export async function withdraw(client: NoctisClient, owner: TransactionSigner, k
     payer: client.payer,
     rpc: client.rpc,
   });
-  return run(client, plan, progress);
+  await executeBatched(client, wallet, plan, op);
 }
 
 export type ActivityItem = { signature: string; time: number | null; kinds: string[]; ok: boolean };

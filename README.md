@@ -95,6 +95,22 @@ message signatures derive the keys, one transaction registers them), deposit,
 apply, send to a wallet address, receive with a QR code, withdraw, activity.
 Balances are decrypted in the tab and the keys live in memory only.
 
+Wallet approvals per operation:
+
+| Operation | Approvals | Transactions |
+|---|---|---|
+| Unlock keys | 1 message | 0 |
+| Activate | 1 message + 1 | 1 |
+| Deposit (spendable immediately) | 1 | 1 |
+| Send | 1 | 5 |
+| Withdraw | 1 | 4 |
+
+All transactions of an operation are planned up front and approved in a single
+Wallet Standard `signTransaction` call, then sent in order. Deposit and
+apply-pending are merged into one transaction: the new decryptable balance is
+computed and encrypted locally. A progress panel shows each step (keys, proofs,
+approval, confirmations) with explorer links.
+
 With `NEXT_PUBLIC_DEV_WALLET=1` a "Noctis Dev Wallet" appears in the connect
 menu: a burner key kept in `localStorage`, auto-funded on localnet, meant for
 demos and tests only.
@@ -150,9 +166,8 @@ Stack: [`@solana/kit`](https://github.com/anza-xyz/kit) 8 ·
 
 1. ~~Reproducible build, remove leaked keys, honest README~~ ✅
 2. ~~Real confidential transfer lifecycle, scripted and timed~~ ✅
-3. ~~Web app on `@solana/kit` + Wallet Standard~~ ✅ — next: proofs in a Web
-   Worker, fewer wallet prompts per transfer (session key for proof accounts),
-   payment-request links.
+3. ~~Web app on `@solana/kit` + Wallet Standard~~ ✅ — one approval per
+   operation ✅; next: proofs in a Web Worker, payment-request links.
 4. **Differentiation**: payment requests (encrypted amount, memo, expiry) via a
    thin Anchor program; per-mint auditor key and compliance view. Then an SDK.
 

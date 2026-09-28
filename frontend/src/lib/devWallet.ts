@@ -68,6 +68,11 @@ export async function registerDevWallet() {
     label: "Dev wallet (burner)",
   };
 
+  // Counts approval requests, as a real wallet would show popups. Read it from
+  // the console (window.__noctisPrompts) to check how many approvals a flow needs.
+  const prompts = { signTransaction: 0, transactionsSigned: 0, signMessage: 0 };
+  (window as unknown as { __noctisPrompts: typeof prompts }).__noctisPrompts = prompts;
+
   let connected: readonly WalletAccount[] = [];
   const listeners = new Set<StandardEventsListeners["change"]>();
   const emit = () => listeners.forEach((l) => l({ accounts: connected }));
@@ -105,6 +110,8 @@ export async function registerDevWallet() {
         version: "1.0.0",
         supportedTransactionVersions: ["legacy", 0],
         signTransaction: async (...inputs: readonly SolanaSignTransactionInput[]) => {
+          prompts.signTransaction += 1;
+          prompts.transactionsSigned += inputs.length;
           const dec = getTransactionDecoder();
           const enc = getTransactionEncoder();
           const out = [];
@@ -119,6 +126,7 @@ export async function registerDevWallet() {
       "solana:signMessage": {
         version: "1.0.0",
         signMessage: async (...inputs: readonly SolanaSignMessageInput[]) => {
+          prompts.signMessage += 1;
           const out = [];
           for (const i of inputs) {
             const signature = await signBytes(keyPair.privateKey, i.message);

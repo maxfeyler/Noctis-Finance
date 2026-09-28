@@ -17,13 +17,29 @@ export function toBase(ui: string, decimals: number): bigint {
   if (frac.length > decimals) throw new Error(`At most ${decimals} decimals`);
   return BigInt(int + frac.padEnd(decimals, "0"));
 }
-export function errorMessage(e: unknown): string {
+function rawMessage(e: unknown): string {
   if (e instanceof Error) {
     // Kit errors wrap the useful message in `context.causeMessage` or in cause chains.
     const ctx = (e as { context?: { causeMessage?: string } }).context;
     if (ctx?.causeMessage) return ctx.causeMessage.split("\n")[0].trim();
-    if (e.cause instanceof Error) return errorMessage(e.cause);
+    if (e.cause instanceof Error) return rawMessage(e.cause) || e.message;
     return e.message;
   }
   return String(e);
+}
+
+const FRIENDLY: [RegExp, string][] = [
+  [/user rejected|rejected the request|declined|cancel+ed|4001/i, "You declined the request in your wallet. Nothing was sent."],
+  [/block height exceeded|blockhash not found|expired/i, "The approval took too long and the transactions expired. Try again, and approve within a minute."],
+  [/attempt to debit an account but found no record|insufficient lamports|insufficient funds for (fee|rent)/i, "Not enough SOL for fees and proof-account rent. Add a little SOL to this wallet."],
+  [/0x1\b|insufficientfunds|insufficient funds/i, "Insufficient balance for this amount."],
+  [/proof_verification failed|invalid instruction data/i, "The on-chain proof check failed. Refresh your balance and try again."],
+  [/walletmultisign|multisign_unimplemented/i, "This wallet cannot approve several transactions at once."],
+];
+
+/** A one-sentence message a person can act on. */
+export function errorMessage(e: unknown): string {
+  const raw = rawMessage(e);
+  for (const [re, msg] of FRIENDLY) if (re.test(raw)) return msg;
+  return raw.length > 180 ? raw.slice(0, 177) + "…" : raw;
 }

@@ -18,14 +18,28 @@ export type SignMessageFn = (input: { message: Uint8Array }) => Promise<{ signat
 /**
  * The SDK derives keys through a `MessagePartialSigner`; wallets expose a
  * `signMessage` feature instead. This adapter bridges the two.
+ *
+ * The ElGamal and AES derivations sign the very same `solana-conf-bal/v1`
+ * message, so signatures are cached per message: one wallet prompt, not two.
+ * Ed25519 signatures are deterministic, so reusing one is exactly what a
+ * second prompt would have returned.
  */
 export function messageSignerFromWallet(address: Address, signMessage: SignMessageFn): MessagePartialSigner {
+  const cache = new Map<string, Promise<Uint8Array>>();
+  const keyOf = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
   return {
     address,
     async signMessages(messages: readonly SignableMessage[]): Promise<readonly SignatureDictionary[]> {
       const out: SignatureDictionary[] = [];
       for (const m of messages) {
-        const { signature } = await signMessage({ message: m.content });
+        const k = keyOf(m.content);
+        let pending = cache.get(k);
+        if (!pending) {
+          pending = signMessage({ message: m.content }).then((r) => r.signature);
+          pending.catch(() => cache.delete(k));
+          cache.set(k, pending);
+        }
+        const signature = await pending;
         out.push(Object.freeze({ [address]: signature }) as SignatureDictionary);
       }
       return out;
