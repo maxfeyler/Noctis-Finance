@@ -21,10 +21,6 @@ export default function Landing() {
         </h1>
         <p className="landing-tagline">The place where your money moves privately.</p>
       </section>
-
-      <footer className="landing-foot">
-        Amounts encrypted with ElGamal · verified by zero-knowledge proofs · Solana Token-2022
-      </footer>
     </main>
   );
 }
