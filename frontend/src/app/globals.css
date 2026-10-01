@@ -161,9 +161,8 @@ label.lbl { display: block; font-size: 0.8rem; color: var(--ink-2); margin-botto
   display: flex; align-items: center; justify-content: space-between;
   padding: clamp(18px, 3vw, 32px) clamp(20px, 4vw, 48px);
 }
-.landing-mark { display: inline-flex; }
-.landing .mark { width: 26px; height: 26px; background: var(--ink-night); }
-.landing .mark::after { background: var(--night); }
+.landing-mark { display: inline-flex; --mark-limb: var(--ink-night); --mark-accent: var(--glow); border-radius: 50%; }
+.landing-mark:focus-visible { outline: 2px solid var(--glow); outline-offset: 4px; }
 .landing ::selection { background: var(--glow); color: var(--night); }
 
 .ghost-btn {

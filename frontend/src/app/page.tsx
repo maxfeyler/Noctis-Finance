@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AuroraBackground } from "@/components/landing/AuroraBackground";
+import { LunaisonMark } from "@/components/brand/LunaisonMark";
 
 export default function Landing() {
   return (
@@ -7,8 +8,8 @@ export default function Landing() {
       <AuroraBackground />
 
       <header className="landing-header">
-        <Link href="/" className="landing-mark" aria-label="Noctis Finance">
-          <span className="mark" aria-hidden />
+        <Link href="/" className="landing-mark" aria-label="Noctis Finance, home">
+          <LunaisonMark size={40} title="" />
         </Link>
         <Link href="/app" className="ghost-btn">
           Enter App
