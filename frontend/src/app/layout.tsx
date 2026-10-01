@@ -1,22 +1,22 @@
 import type { Metadata } from "next";
-import { Fraunces, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Fraunces, IBM_Plex_Mono, IBM_Plex_Sans, Instrument_Serif } from "next/font/google";
 import "./globals.css";
-import { Providers } from "./providers";
 
 const display = Fraunces({ subsets: ["latin"], variable: "--font-display", axes: ["opsz"] });
-const sans = IBM_Plex_Sans({ subsets: ["latin"], variable: "--font-sans", weight: ["400", "500", "600"] });
+const sans = IBM_Plex_Sans({ subsets: ["latin"], variable: "--font-sans", weight: ["300", "400", "500", "600"] });
 const mono = IBM_Plex_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400", "500"] });
+const editorial = Instrument_Serif({ subsets: ["latin"], variable: "--font-editorial", weight: "400", style: ["normal", "italic"] });
 
 export const metadata: Metadata = {
-  title: "Noctis",
-  description: "Confidential payments on Solana, built on Token-2022 confidential transfers.",
+  title: "Noctis Finance",
+  description: "The place where your money moves privately. Confidential payments on Solana.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable} ${editorial.variable}`}>
       <body>
-        <Providers>{children}</Providers>
+        {children}
       </body>
     </html>
   );

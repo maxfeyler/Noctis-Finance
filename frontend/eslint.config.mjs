@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated, minified WebGL gradient engine exported from the design tool.
+    "src/components/landing/NorthernLights.jsx",
   ]),
 ]);
 

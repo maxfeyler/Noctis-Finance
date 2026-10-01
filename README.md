@@ -84,8 +84,12 @@ sent from the web app.
 ```bash
 cd frontend && npm install
 cp .env.example .env.local      # set NEXT_PUBLIC_RPC_URL; NEXT_PUBLIC_DEV_WALLET=1 for a burner wallet
-npm run dev                     # http://localhost:3000
+npm run dev                     # landing on http://localhost:3000, app on /app
 ```
+
+The landing page (`/`) renders a live WebGL aurora exported from a design tool
+(`frontend/src/components/landing/NorthernLights.jsx`, generated, do not edit;
+about 110 kB gzipped, loaded after the text). "Enter App" leads to `/app`.
 
 The app talks to the wallet through the Wallet Standard (`@wallet-standard/react`
 + `@solana/react`), so any wallet exposing `solana:signTransaction` and
